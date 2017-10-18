@@ -8,14 +8,7 @@
 
 using namespace std;
 using namespace cv;
-//initial min and max HSV filter values.
-//these will be changed using trackbars
-int H_MIN = 0;
-int H_MAX = 256;
-int S_MIN = 0;
-int S_MAX = 256;
-int V_MIN = 0;
-int V_MAX = 256;
+
 //default capture width and height
 const int FRAME_WIDTH = 640;
 const int FRAME_HEIGHT = 480;
@@ -53,7 +46,8 @@ string intToString(int number) {
 	return ss.str();
 }
 
-void createTrackbars() {
+void createTrackbars(int &H_MIN, int &H_MAX, int &S_MIN,
+		int &S_MAX, int &V_MIN, int &V_MAX) {
 	//create window for trackbars
 
 
@@ -86,7 +80,7 @@ void drawObject(int x, int y, Mat &frame) {
 	//on your tracked image!
 
 	//UPDATE:JUNE 18TH, 2013
-	//added 'if' and 'else' statements to prevent
+	//added 'if' anmorphOpsd 'else' statements to prevent
 	//memory errors from writing off the screen (ie. (-25,-25) is not within the window!)
 
 	circle(frame, Point(x, y), 20, Scalar(0, 255, 0), 2);
@@ -150,7 +144,8 @@ void trackFilteredObject(int &x, int &y, Mat threshold, Mat &cameraFeed) {
 				//if the area is less than 20 px by 20px then it is probably just noise
 				//if the area is the same as the 3/2 of the image size, probably just a bad filter
 				//we only want the object with the largest area so we safe a reference area each
-				//iteration and compare it to the area in the next iteration.
+				//i//initial min and max HSV filter values.
+				//these will be changed using trackbars iteration and compare it to the area in the next iteration.
 				if (area > MIN_OBJECT_AREA && area<MAX_OBJECT_AREA && area>refArea) {
 					x = moment.m10 / area;
 					y = moment.m01 / area;
@@ -187,17 +182,36 @@ int main(int argc, char* argv[])
 	//Matrix to store each frame of the webcam feed
 	Mat cameraFeed;
 	//matrix storage for HSV image
-	Mat HSV;
+	Mat HSV, HSV1;
 	//matrix storage for binary threshold image
-	Mat threshold;
+	Mat threshold, threshold1;
 	//x and y values for the location of the object
 	int x = 0, y = 0;
+	int x1 = 0, y1 = 0;
 	//create slider bars for HSV filtering
-	createTrackbars();
+	//initial min and max HSV filter values.
+	//these will be changed using trackbars
+	int H_MIN = 162;
+	int H_MAX = 256;
+	int S_MIN = 0;
+	int S_MAX = 256;
+	int V_MIN = 0;
+	int V_MAX = 256;
+	//initial min and max HSV filter values.
+	//these will be changed using trackbars
+	// dusmanu'
+	int H_MIN1 = 0;
+	int H_MAX1 = 256;
+	int S_MIN1 = 110;
+	int S_MAX1 = 256;
+	int V_MIN1 = 246;
+	int V_MAX1 = 256;
+	createTrackbars(H_MIN, H_MAX, S_MIN, S_MAX, V_MIN, V_MAX);
+	createTrackbars(H_MIN1, H_MAX1, S_MIN1, S_MAX1, V_MIN1, V_MAX1);
 	//video capture object to acquire webcam feed
 	VideoCapture capture;
 	//open capture object at location zero (default location for webcam)
-	capture.open(0);
+	capture.open("rtmp://172.16.254.99/live/nimic");
 	//set height and width of capture frame
 	capture.set(CV_CAP_PROP_FRAME_WIDTH, FRAME_WIDTH);
 	capture.set(CV_CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT);
@@ -206,7 +220,7 @@ int main(int argc, char* argv[])
 
 
 
-	
+
 	while (1) {
 
 
@@ -216,21 +230,29 @@ int main(int argc, char* argv[])
 		cvtColor(cameraFeed, HSV, COLOR_BGR2HSV);
 		//filter HSV image between values and store filtered image to
 		//threshold matrix
+
 		inRange(HSV, Scalar(H_MIN, S_MIN, V_MIN), Scalar(H_MAX, S_MAX, V_MAX), threshold);
+		inRange(HSV, Scalar(H_MIN1, S_MIN1, V_MIN1), Scalar(H_MAX1, S_MAX1, V_MAX1), threshold1);
 		//perform morphological operations on thresholded image to eliminate noise
 		//and emphasize the filtered object(s)
 		if (useMorphOps)
+		{
 			morphOps(threshold);
+			morphOps(threshold1);
+		}
 		//pass in thresholded frame to our object tracking function
 		//this function will return the x and y coordinates of the
 		//filtered object
 		if (trackObjects)
+		{
 			trackFilteredObject(x, y, threshold, cameraFeed);
-
+			trackFilteredObject(x1, y1, threshold1, cameraFeed);
+		}
 		//show frames
 		imshow(windowName2, threshold);
+		imshow(windowName2, threshold1);
 		imshow(windowName, cameraFeed);
-		imshow(windowName1, HSV);
+		//imshow(windowName1, HSV);
 		setMouseCallback("Original Image", on_mouse, &p);
 		//delay 30ms so that screen can refresh.
 		//image will not appear without this waitKey() command
@@ -239,4 +261,3 @@ int main(int argc, char* argv[])
 
 	return 0;
 }
-
