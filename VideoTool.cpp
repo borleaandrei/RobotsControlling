@@ -5,6 +5,7 @@
 #include "opencv2/highgui/highgui.hpp"
 //#include <opencv2\cv.h>
 #include "opencv2/opencv.hpp"
+#include "sockets.h"
 
 using namespace std;
 using namespace cv;
@@ -175,7 +176,7 @@ int main(int argc, char* argv[])
 
 	//some boolean variables for different functionality within this
 	//program
-	bool trackObjects = true;
+	/*bool trackObjects = true;
 	bool useMorphOps = true;
 
 	Point p;
@@ -217,13 +218,17 @@ int main(int argc, char* argv[])
 	capture.set(CV_CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT);
 	//start an infinite loop where webcam feed is copied to cameraFeed matrix
 	//all of our operations will be performed within this loop
+*/
 
 
+	connect_connection((char*)"193.226.12.217", 20236);
+	send_connection('s');
+	close_connection();
+	//while (1)
+	{
 
 
-	while (1) {
-
-
+		/*
 		//store image to matrix
 		capture.read(cameraFeed);
 		//convert frame from BGR to HSV colorspace
@@ -256,7 +261,7 @@ int main(int argc, char* argv[])
 		setMouseCallback("Original Image", on_mouse, &p);
 		//delay 30ms so that screen can refresh.
 		//image will not appear without this waitKey() command
-		waitKey(30);
+		waitKey(30);*/
 	}
 
 	return 0;
