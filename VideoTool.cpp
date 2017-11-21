@@ -1,6 +1,7 @@
 #include <sstream>
 #include <string>
 #include <iostream>
+#include <string>
 //#include <opencv2\highgui.h>
 #include "opencv2/highgui/highgui.hpp"
 //#include <opencv2\cv.h>
@@ -20,40 +21,62 @@ const int MAX_NUM_OBJECTS = 50;
 const int MIN_OBJECT_AREA = 20 * 20;
 const int MAX_OBJECT_AREA = FRAME_HEIGHT*FRAME_WIDTH / 1.5;
 //names that will appear at the top of each window
-const std::string windowName = "Original Image";
-const std::string windowName1 = "HSV Image";
-const std::string windowName2 = "Thresholded Image";
-const std::string windowName3 = "After Morphological Operations";
-const std::string trackbarWindowName = "Trackbars";
+std::string windowName = "Original Image";
+std::string windowName1 = "HSV Image";
+std::string windowName2 = "Thresholded Image";
+std::string windowName3 = "After Morphological Operations";
+std::string trackbarWindowName = "Trackbars";
 
-
-void on_mouse(int e, int x, int y, int d, void *ptr)
+class ColorDetection
 {
-	if (e == EVENT_LBUTTONDOWN)
-	{
-		cout << "Left button of the mouse is clicked - position (" << x << ", " << y << ")" << endl;
-	}
-}
+public:
+    int x = 0, y = 0;
+    int H_MIN, H_MAX, S_MIN, S_MAX, V_MIN, V_MAX;
+    Mat threshold;
+    Mat HSV;
+    bool trackObjects = true;
+    bool useMorphOps = true;
+    VideoCapture capture;
+    Point p;
+    //Matrix to store each frame of the webcam feed
+    Mat cameraFeed;
+    std::string name;
+
+public:
+    ColorDetection(int H_MIN, int H_MAX, int S_MIN, int S_MAX, int V_MIN, int V_MAX, const VideoCapture &capture, const std::string name);
+    ~ColorDetection();
+
+    void createTrackbars();
+    void drawObject(Mat &frame);
+    void morphOps(Mat &thresh);
+    void trackFilteredObject(Mat &cameraFeed);
+    void trackColor(void);
+    void on_trackbar(int, void*);
+};
 
 void on_trackbar(int, void*)
-{//This function gets called whenever a
- // trackbar position is changed
+{
+
 }
 
-string intToString(int number) {
-
-
+string intToString(int number)
+{
 	std::stringstream ss;
 	ss << number;
 	return ss.str();
 }
 
-void createTrackbars(int &H_MIN, int &H_MAX, int &S_MIN,
-		int &S_MAX, int &V_MIN, int &V_MAX) {
+ColorDetection::ColorDetection(int H_MIN, int H_MAX, int S_MIN, int S_MAX, int V_MIN, int V_MAX, const VideoCapture &capture, std::string name) : H_MIN(
+        H_MIN), H_MAX(H_MAX), S_MIN(S_MIN), S_MAX(S_MAX), V_MIN(V_MIN), V_MAX(V_MAX), capture(capture), name(name)
+{}
+
+ColorDetection::~ColorDetection() {}
+
+void ColorDetection::createTrackbars() {
 	//create window for trackbars
 
-
-	namedWindow(trackbarWindowName, 0);
+    std::string crtTrackbarWindowName = trackbarWindowName + " " + name;
+	namedWindow(crtTrackbarWindowName, 0);
 	//create memory to store trackbar name on window
 	char TrackbarName[50];
 	sprintf(TrackbarName, "H_MIN", H_MIN);
@@ -67,16 +90,15 @@ void createTrackbars(int &H_MIN, int &H_MAX, int &S_MIN,
 	//the max value the trackbar can move (eg. H_HIGH),
 	//and the function that is called whenever the trackbar is moved(eg. on_trackbar)
 	//                                  ---->    ---->     ---->
-	createTrackbar("H_MIN", trackbarWindowName, &H_MIN, H_MAX, on_trackbar);
-	createTrackbar("H_MAX", trackbarWindowName, &H_MAX, H_MAX, on_trackbar);
-	createTrackbar("S_MIN", trackbarWindowName, &S_MIN, S_MAX, on_trackbar);
-	createTrackbar("S_MAX", trackbarWindowName, &S_MAX, S_MAX, on_trackbar);
-	createTrackbar("V_MIN", trackbarWindowName, &V_MIN, V_MAX, on_trackbar);
-	createTrackbar("V_MAX", trackbarWindowName, &V_MAX, V_MAX, on_trackbar);
-
-
+	createTrackbar("H_MIN", crtTrackbarWindowName, &H_MIN, H_MAX);
+	createTrackbar("H_MAX", crtTrackbarWindowName, &H_MAX, H_MAX);
+	createTrackbar("S_MIN", crtTrackbarWindowName, &S_MIN, S_MAX);
+	createTrackbar("S_MAX", crtTrackbarWindowName, &S_MAX, S_MAX);
+	createTrackbar("V_MIN", crtTrackbarWindowName, &V_MIN, V_MAX);
+	createTrackbar("V_MAX", crtTrackbarWindowName, &V_MAX, V_MAX);
 }
-void drawObject(int x, int y, Mat &frame) {
+
+void ColorDetection::drawObject(Mat &frame) {
 
 	//use some of the openCV drawing functions to draw crosshairs
 	//on your tracked image!
@@ -100,11 +122,9 @@ void drawObject(int x, int y, Mat &frame) {
 	else line(frame, Point(x, y), Point(FRAME_WIDTH, y), Scalar(0, 255, 0), 2);
 
 	putText(frame, intToString(x) + "," + intToString(y), Point(x, y + 30), 1, 1, Scalar(0, 255, 0), 2);
-	//cout << "x,y: " << x << ", " << y;
-
 }
-void morphOps(Mat &thresh) {
-
+void ColorDetection::morphOps(Mat &thresh)
+{
 	//create structuring element that will be used to "dilate" and "erode" image.
 	//the element chosen here is a 3px by 3px rectangle
 
@@ -118,11 +138,9 @@ void morphOps(Mat &thresh) {
 
 	dilate(thresh, thresh, dilateElement);
 	dilate(thresh, thresh, dilateElement);
-
-
-
 }
-void trackFilteredObject(int &x, int &y, Mat threshold, Mat &cameraFeed) {
+
+void ColorDetection::trackFilteredObject(Mat &cameraFeed) {
 
 	Mat temp;
 	threshold.copyTo(temp);
@@ -149,8 +167,8 @@ void trackFilteredObject(int &x, int &y, Mat threshold, Mat &cameraFeed) {
 				//i//initial min and max HSV filter values.
 				//these will be changed using trackbars iteration and compare it to the area in the next iteration.
 				if (area > MIN_OBJECT_AREA && area<MAX_OBJECT_AREA && area>refArea) {
-					x = moment.m10 / area;
-					y = moment.m01 / area;
+                    this->x = moment.m10 / area;
+                    this->y = moment.m01 / area;
 					objectFound = true;
 					refArea = area;
 				}
@@ -163,129 +181,87 @@ void trackFilteredObject(int &x, int &y, Mat threshold, Mat &cameraFeed) {
 				putText(cameraFeed, "Tracking Object", Point(0, 50), 2, 1, Scalar(0, 255, 0), 2);
 				//draw object location on screen
 				//cout << x << "," << y;
-				drawObject(x, y, cameraFeed);
-
+				drawObject(cameraFeed);
 			}
-
-
 		}
 		else putText(cameraFeed, "TOO MUCH NOISE! ADJUST FILTER", Point(0, 50), 1, 2, Scalar(0, 0, 255), 2);
 	}
 }
+
+void ColorDetection::trackColor(void)
+{
+    //store image to matrix
+    capture.read(cameraFeed);
+    //convert frame from BGR to HSV colorspace
+    cvtColor(cameraFeed, HSV, COLOR_BGR2HSV);
+    //filter HSV image between values and store filtered image to
+    //threshold matrix
+
+    inRange(HSV, Scalar(H_MIN, S_MIN, V_MIN), Scalar(H_MAX, S_MAX, V_MAX), threshold);
+
+    //perform morphological operations on thresholded image to eliminate noise
+    //and emphasize the filtered object(s)
+    if (useMorphOps)
+    {
+        morphOps(threshold);
+    }
+    //pass in thresholded frame to our object tracking function
+    //this function will return the x and y coordinates of the
+    //filtered object
+    if (trackObjects)
+    {
+        trackFilteredObject(cameraFeed);
+    }
+
+    //show frames
+    //imshow(name + windowName2, threshold);
+    imshow(name + windowName, cameraFeed);
+    //imshow(name + windowName1, HSV);
+    //delay 30ms so that screen can refresh.
+    //image will not appear without this waitKey() command
+    waitKey(30);
+}
+
 int main(int argc, char* argv[])
 {
 
-	//some boolean variables for different functionality within this
-	//program
-	bool trackObjects = true;
-	bool useMorphOps = true;
-
-	Point p;
-	//Matrix to store each frame of the webcam feed
-	Mat cameraFeed;
-	//matrix storage for HSV image
-	Mat HSV, HSV1;
-	//matrix storage for binary threshold image
-	Mat threshold, threshold1, threshold2;
-	//x and y values for the location of the object
-	int x_a = 0, y_a = 0;
-	int x1 = 0, y1 = 0;
-	int x_g= 0, y_g = 0;
-	//create slider bars for HSV filtering
-	//initial min and max HSV filter values.
-	//these will be changed using trackbars
-	// ALABSTRU
-	int H_MIN = 0;
-	int H_MAX = 119;
-	int S_MIN = 29;
-	int S_MAX = 135;
-	int V_MIN = 203;
-	int V_MAX = 256;
-
-	//ROZ
-	int H_MIN2 = 120;
-	int H_MAX2 = 256;
-	int S_MIN2 = 0;
-	int S_MAX2 = 256;
-	int V_MIN2 = 246;
-	int V_MAX2 = 256;
-	//initial min and max HSV filter values.
-	//these will be changed using trackbars
-	// dusmanu'
-	// GALBEN
-	int H_MIN1 = 0;
-	int H_MAX1 = 256;
-	int S_MIN1 = 110;
-	int S_MAX1 = 256;
-	int V_MIN1 = 246;
-	int V_MAX1 = 256;
-	//createTrackbars(H_MIN, H_MAX, S_MIN, S_MAX, V_MIN, V_MAX);
-	//createTrackbars(H_MIN1, H_MAX1, S_MIN1, S_MAX1, V_MIN1, V_MAX1);
-	//video capture object to acquire webcam feed
-	VideoCapture capture;
-	//open capture object at location zero (default location for webcam)
-	capture.open("rtmp://172.16.254.99/live/nimic");
-	//set height and width of capture frame
-	capture.set(CV_CAP_PROP_FRAME_WIDTH, FRAME_WIDTH);
-	capture.set(CV_CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT);
 	//start an infinite loop where webcam feed is copied to cameraFeed matrix
 	//all of our operations will be performed within this loop
-
-
 
 	//connect_connection((char*)"193.226.12.217", 20232);
 
 	//send_connection('l');
 
 	//close_connection();
+
+    VideoCapture capture;
+    //open capture object at location zero (default location for webcam)
+    capture.open(0/*"rtmp://172.16.254.99/live/nimic"*/);
+    //set height and width of capture frame
+    capture.set(CV_CAP_PROP_FRAME_WIDTH, FRAME_WIDTH);
+    capture.set(CV_CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT);
+
+    ColorDetection inamic(84, 256, 0, 256, 79, 246, capture, "inamic"); // roz
+    ColorDetection eu_corp( 0, 90, 53, 190, 179, 256, capture, "eu"); //galben
+    ColorDetection eu_cap(74, 256, 115, 256, 104, 256, capture, "cap"); //albastru
+
+    inamic.createTrackbars();
+    eu_corp.createTrackbars();
+    eu_cap.createTrackbars();
+
 	while (1)
-	{
-		//store image to matrix
-		capture.read(cameraFeed);
-		//convert frame from BGR to HSV colorspace
-		cvtColor(cameraFeed, HSV, COLOR_BGR2HSV);
-		//filter HSV image between values and store filtered image to
-		//threshold matrix
+    {
+        inamic.trackColor();
+        eu_corp.trackColor();
+        eu_cap.trackColor();
 
-		inRange(HSV, Scalar(H_MIN, S_MIN, V_MIN), Scalar(H_MAX, S_MAX, V_MAX), threshold);
-		inRange(HSV, Scalar(H_MIN1, S_MIN1, V_MIN1), Scalar(H_MAX1, S_MAX1, V_MAX1), threshold1);
-		inRange(HSV, Scalar(H_MIN2, S_MIN2, V_MIN2), Scalar(H_MAX2, S_MAX2, V_MAX2), threshold2);
-		//perform morphological operations on thresholded image to eliminate noise
-		//and emphasize the filtered object(s)
-		if (useMorphOps)
-		{
-			morphOps(threshold);
-			morphOps(threshold1);
-			morphOps(threshold2);
-		}
-		//pass in thresholded frame to our object tracking function
-		//this function will return the x and y coordinates of the
-		//filtered object
-		if (trackObjects)
-		{
-			trackFilteredObject(x_a, x_a, threshold, cameraFeed);
-			trackFilteredObject(x_g, y_g, threshold1, cameraFeed);
-			trackFilteredObject(x1, y1, threshold2, cameraFeed);
-		}
-
-		double angle = 90;
-		if( x_g != x_a )
-		{
-			double slope = (y_g - y_a)/(x_g - x_a);
-			angle = atan(slope);
-		}
-		std::cout << "Angle: " << angle << std::endl;
-		//show frames
-		imshow(windowName2, threshold2);
-		imshow(windowName2, threshold1);
-		imshow(windowName2, threshold);
-		imshow(windowName, cameraFeed);
-		//imshow(windowName1, HSV);
-		setMouseCallback("Original Image", on_mouse, &p);
-		//delay 30ms so that screen can refresh.
-		//image will not appear without this waitKey() command
-		waitKey(30);
-	}
+        double angle = 90;
+        if( eu_corp.x != eu_cap.x )
+        {
+            angle = atan(((double)eu_corp.y - (double)eu_cap.y)/((double)eu_corp.x - (double)eu_cap.x)) * 57.29;
+        }
+        std::cout << "Angle: " << angle << std::endl;
+    }
 
 	return 0;
 }
