@@ -50,6 +50,8 @@ public:
 
     void createTrackbars();
 
+    double static calculateAngle(ColorDetection a, ColorDetection b);
+
     void drawObject(Mat &frame);
 
     void morphOps(Mat &thresh);
@@ -110,6 +112,22 @@ ColorDetection::ColorDetection(int H_MIN, int H_MAX, int S_MIN, int S_MAX, int V
         H_MIN), H_MAX(H_MAX), S_MIN(S_MIN), S_MAX(S_MAX), V_MIN(V_MIN), V_MAX(V_MAX), capture(capture), name(name) {}
 
 ColorDetection::~ColorDetection() {}
+
+
+double ColorDetection::calculateAngle(ColorDetection a, ColorDetection b) {
+  double angle = 90;
+  if (a.x != b.x) {
+      angle = atan(((double) b.y - (double) a.y) / ((double) b.x - (double) a.x)) * 57.29;
+  }
+  if (b.x > a.x) {
+      angle += 180;
+  } else {
+      if (a.y < b.y) {
+          angle += 360;
+      }
+  }
+  return angle;
+}
 
 void ColorDetection::createTrackbars() {
     //create window for trackbars
@@ -248,7 +266,7 @@ void ColorDetection::trackColor(void) {
     }
 
     //show frames
-    //imshow(name + windowName2, threshold);
+    imshow(name + windowName + "th", threshold);
     imshow(name + windowName, cameraFeed);
     //imshow(name + windowName1, HSV);
     //delay 30ms so that screen can refresh.
@@ -269,7 +287,7 @@ int main(int argc, char *argv[]) {
 
     VideoCapture capture;
     //open capture object at location zero (default location for webcam)
-    capture.open(0/*"rtmp://172.16.254.99/live/nimic"*/);
+    capture.open("rtmp://172.16.254.99/live/nimic");
     //set height and width of capture frame
     capture.set(CV_CAP_PROP_FRAME_WIDTH, FRAME_WIDTH);
     capture.set(CV_CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT);
@@ -279,28 +297,19 @@ int main(int argc, char *argv[]) {
     ColorDetection eu_cap(74, 256, 115, 256, 104, 256, capture, "cap"); //albastru
 
     inamic.createTrackbars();
-    eu_corp.createTrackbars();
     eu_cap.createTrackbars();
+    eu_corp.createTrackbars();
 
     while (1)
     {
-        inamic.detectRing();
+        //inamic.detectRing();
         inamic.trackColor();
-        eu_corp.trackColor();
         eu_cap.trackColor();
+        eu_corp.trackColor();
 
-        double angle = 90;
-        if (eu_corp.x != eu_cap.x) {
-            angle = atan(((double) eu_corp.y - (double) eu_cap.y) / ((double) eu_corp.x - (double) eu_cap.x)) * 57.29;
-        }
-        if (eu_corp.x > eu_cap.x) {
-            angle += 180;
-        } else {
-            if (eu_cap.y < eu_corp.y) {
-                angle += 360;
-            }
-        }
-        std::cout << "Angle: " << angle << std::endl;
+        ///calculateAngle
+          std::cout << "Angle me: " << ColorDetection::calculateAngle(eu_cap, eu_corp) << "\n";
+          std::cout << "Angle me->enemy: " << ColorDetection::calculateAngle(eu_corp, inamic) << "\n";
     }
 
     return 0;
