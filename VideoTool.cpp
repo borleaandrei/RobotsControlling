@@ -36,6 +36,7 @@ unsigned int ring_radius = 0;
 int UPPER_THRES = 170, CENTER_THRES = 100;
 
 void detectRing(Mat cameraFeed);
+
 void createRingTrackbars(void);
 /*------------------------------------------*/
 
@@ -45,7 +46,11 @@ void createRingTrackbars(void);
 VideoCapture capture;
 /*Matrix to store each frame of the webcam feed*/
 Mat cameraFeed;
+
 /*------------------------------------------*/
+
+double calcAngle(int ax, int ay, int bx, int by);
+void rotateSelf(int wanted_angle);
 
 class ColorDetection {
 public:
@@ -79,7 +84,13 @@ public:
     void trackColor(void);
 
     void on_trackbar(int, void *);
+
+    bool checkDistanceToMargin(int percentage);
 };
+
+ColorDetection eu_corp(84, 256, 0, 256, 95, 256, "corp"); // roz inamic
+ColorDetection eu_cap(81, 113, 0, 256, 217, 256, "cap"); //galben
+ColorDetection inamic(0, 55, 115, 256, 137, 256, "inamic"); //albastru
 
 void on_trackbar(int, void *) {
 
@@ -96,11 +107,7 @@ int main(int argc, char *argv[]) {
     //start an infinite loop where webcam feed is copied to cameraFeed matrix
     //all of our operations will be performed within this loop
 
-    //connect_connection((char*)"193.226.12.217", 20232);
-
-    //send_connection('l');
-
-    //close_connection();
+    connect_connection((char *) "193.226.12.217", 20232);
 
     //open capture object at location zero (default location for webcam)
     capture.open(/*"rtmp://172.16.254.99/live/nimic"*/0);
@@ -114,28 +121,90 @@ int main(int argc, char *argv[]) {
     //createRingTrackbars();
     detectRing(cameraFeed);
 
-    ColorDetection eu_corp(84, 256, 0, 256, 95, 256, "corp"); // roz inamic
-    ColorDetection eu_cap(81, 113, 0, 256, 217, 256, "cap"); //galben
-    ColorDetection inamic(0, 55, 115, 256, 137, 256, "inamic"); //albastru
-
     //eu_corp.createTrackbars();
     //eu_cap.createTrackbars();
     //inamic.createTrackbars();
 
     while (1) {
-
+        /*Find the absolute positions on the ring*/
         eu_corp.trackColor();
         eu_cap.trackColor();
         inamic.trackColor();
 
-        ///calculateAngle
-        std::cout << "Angle me: " << ColorDetection::calculateAngle(eu_corp, eu_cap) << "\n";
-        std::cout << "Angle me->enemy: " << ColorDetection::calculateAngle(eu_corp, inamic) << "\n";
+        /* Strategy:
+         * 1.Check distance to margin: if too close (10% of radius), try to go towards the center (25% of radius)
+         * 2.Rotate head-on towards the enemy
+         * 3.ANGRIFF
+         * 4.Repeat
+         * */
+
+        /*1.*/
+        if (!eu_cap.checkDistanceToMargin(20) || !eu_corp.checkDistanceToMargin(20)) {
+            /*Calculate the angle towards the center*/
+            std::cout << "Close to falling! Correcting!\n";
+            double selfToCenter = calcAngle(eu_corp.x, eu_corp.y, ring_center.x, ring_center.y);
+            /*Rotate towards the center*/
+            rotateSelf(selfToCenter);
+            send_connection('f');
+            while(1) {
+                /*Get to safe distance from the margin*/
+                std::cout << "Going towards the center! \n";
+                if (eu_cap.checkDistanceToMargin(20) && eu_corp.checkDistanceToMargin(20)) {
+                    send_connection('b');
+                    break;
+                }
+            }
+        }
+
+        /*2.*/
+        double angle_to_enemy = ColorDetection::calculateAngle(eu_corp, inamic);
+        std::cout << "Rotating towards the enemy!\n";
+        rotateSelf(angle_to_enemy);
+
+        /*3.*/
+        send_connection('f');
     }
+
+    close_connection();
 
     return 0;
 }
 
+void rotateSelf(int wanted_angle) {
+    double crt_angle = ColorDetection::calculateAngle(eu_corp, eu_cap);
+    while( abs(crt_angle - wanted_angle) > 10)
+    {
+        std::cout << crt_angle << " " << wanted_angle << " ";
+        if(crt_angle < wanted_angle)
+        {
+            send_connection('l');
+        } else
+        {
+            send_connection('r');
+        }
+        //usleep(200);
+        sleep(2);
+        crt_angle = ColorDetection::calculateAngle(eu_corp, eu_cap);
+    }
+    /*Stop the rotation*/
+    send_connection('l');
+    send_connection('r');
+}
+
+bool ColorDetection::checkDistanceToMargin(int percentage) {
+    eu_corp.trackColor();
+    eu_cap.trackColor();
+    inamic.trackColor();
+
+    double distanceToCenter = sqrt(pow(ring_center.x - this->x, 2) + pow(ring_center.y - this->y, 2));
+
+    std::cout << "Distance to center = " << distanceToCenter << "\n";
+
+    if (distanceToCenter > ring_radius - (double)percentage/100 * ring_radius) {
+        return false;
+    }
+    return true;
+}
 
 /*Ring detection - to be called once before the "battle" begins*/
 void detectRing(Mat cameraFeed) {
@@ -178,25 +247,33 @@ void createRingTrackbars(void) {
     createTrackbar("CENTER_THRES", windowName, &CENTER_THRES, CENTER_THRES);
 }
 
-ColorDetection::ColorDetection(int H_MIN, int H_MAX, int S_MIN, int S_MAX, int V_MIN, int V_MAX, std::string name) : H_MIN(
+ColorDetection::ColorDetection(int H_MIN, int H_MAX, int S_MIN, int S_MAX, int V_MIN, int V_MAX, std::string name)
+        : H_MIN(
         H_MIN), H_MAX(H_MAX), S_MIN(S_MIN), S_MAX(S_MAX), V_MIN(V_MIN), V_MAX(V_MAX), name(name) {}
 
 ColorDetection::~ColorDetection() {}
 
-
-double ColorDetection::calculateAngle(ColorDetection &a, ColorDetection &b) {
+double calcAngle(int ax, int ay, int bx, int by) {
     double angle = 90;
-    if (a.x != b.x) {
-        angle = atan(((double) b.y - (double) a.y) / ((double) b.x - (double) a.x)) * 57.29;
+    if (ax != bx) {
+        angle = atan(((double) by - (double) ay) / ((double) bx - (double) ax)) * 57.29;
     }
-    if (b.x < a.x) {
+    if (bx < ax) {
         angle += 180;
     } else {
-        if (a.y > b.y) {
+        if (ay > by) {
             angle += 360;
         }
     }
     return 360 - angle;
+}
+
+double ColorDetection::calculateAngle(ColorDetection &a, ColorDetection &b) {
+    eu_corp.trackColor();
+    eu_cap.trackColor();
+    inamic.trackColor();
+
+    return calcAngle(a.x, a.y, b.x, b.y);
 }
 
 void ColorDetection::createTrackbars() {
