@@ -27,28 +27,46 @@ std::string windowName2 = "Thresholded Image";
 std::string windowName3 = "After Morphological Operations";
 std::string trackbarWindowName = "Trackbars";
 
+/*Ring data*/
+/*------------------------------------------*/
+/*Ring center and radius*/
+Point ring_center;
+unsigned int ring_radius = 0;
+/*Hough Circle Transform thresholds*/
+int UPPER_THRES = 170, CENTER_THRES = 100;
+
+void detectRing(Mat cameraFeed);
+void createRingTrackbars(void);
+/*------------------------------------------*/
+
+
+/*Camera capture data*/
+/*------------------------------------------*/
+VideoCapture capture;
+/*Matrix to store each frame of the webcam feed*/
+Mat cameraFeed;
+/*------------------------------------------*/
+
 class ColorDetection {
 public:
     int x = 0, y = 0;
     int H_MIN, H_MAX, S_MIN, S_MAX, V_MIN, V_MAX;
-    int radius;//ring radius
+
     Mat threshold;
     Mat HSV;
     bool trackObjects = true;
     bool useMorphOps = true;
-    VideoCapture capture;
+
     Point p;
-    //Matrix to store each frame of the webcam feed
-    Mat cameraFeed;
+
     std::string name;
 
 public:
-    ColorDetection(int H_MIN, int H_MAX, int S_MIN, int S_MAX, int V_MIN, int V_MAX, const VideoCapture &capture,
-                   const std::string name);
+    ColorDetection(int H_MIN, int H_MAX, int S_MIN, int S_MAX, int V_MIN, int V_MAX, const std::string name);
 
     ~ColorDetection();
 
-    void createTrackbars();
+    void createTrackbars(void);
 
     double static calculateAngle(ColorDetection a, ColorDetection b);
 
@@ -61,44 +79,10 @@ public:
     void trackColor(void);
 
     void on_trackbar(int, void *);
-
-    void detectRing(void);
 };
 
 void on_trackbar(int, void *) {
 
-}
-
-void ColorDetection::detectRing()
-{
-    capture.read(cameraFeed);
-    Mat src_gray;
-    /// Convert it to gray
-    cvtColor(cameraFeed, src_gray, CV_BGR2GRAY);
-
-    /// Reduce the noise so we avoid false circle detection
-    GaussianBlur(src_gray, src_gray, Size(9, 9), 2, 2);
-
-    vector<Vec3f> circles;
-
-    /// Apply the Hough Transform to find the circles
-    HoughCircles(src_gray, circles, CV_HOUGH_GRADIENT, 1, src_gray.rows / 8, 200, 100, 0, 0);
-
-    /// Draw the circles detected
-    for (size_t i = 0; i < circles.size(); i++) {
-        Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
-        int radius = cvRound(circles[i][2]);
-        // circle center
-        circle(cameraFeed, center, 3, Scalar(0, 255, 0), -1, 8, 0);
-        // circle outline
-        circle(cameraFeed, center, radius, Scalar(0, 0, 255), 3, 8, 0);
-    }
-
-    /// Show your results
-    namedWindow("Hough Circle Transform Demo", CV_WINDOW_AUTOSIZE);
-    imshow("Hough Circle Transform Demo", cameraFeed);
-
-    waitKey(30);
 }
 
 string intToString(int number) {
@@ -107,26 +91,25 @@ string intToString(int number) {
     return ss.str();
 }
 
-ColorDetection::ColorDetection(int H_MIN, int H_MAX, int S_MIN, int S_MAX, int V_MIN, int V_MAX,
-                               const VideoCapture &capture, std::string name) : H_MIN(
-        H_MIN), H_MAX(H_MAX), S_MIN(S_MIN), S_MAX(S_MAX), V_MIN(V_MIN), V_MAX(V_MAX), capture(capture), name(name) {}
+ColorDetection::ColorDetection(int H_MIN, int H_MAX, int S_MIN, int S_MAX, int V_MIN, int V_MAX, std::string name) : H_MIN(
+        H_MIN), H_MAX(H_MAX), S_MIN(S_MIN), S_MAX(S_MAX), V_MIN(V_MIN), V_MAX(V_MAX), name(name) {}
 
 ColorDetection::~ColorDetection() {}
 
 
 double ColorDetection::calculateAngle(ColorDetection a, ColorDetection b) {
-  double angle = 90;
-  if (a.x != b.x) {
-      angle = atan(((double) b.y - (double) a.y) / ((double) b.x - (double) a.x)) * 57.29;
-  }
-  if (b.x > a.x) {
-      angle += 180;
-  } else {
-      if (a.y < b.y) {
-          angle += 360;
-      }
-  }
-  return angle;
+    double angle = 90;
+    if (a.x != b.x) {
+        angle = atan(((double) b.y - (double) a.y) / ((double) b.x - (double) a.x)) * 57.29;
+    }
+    if (b.x > a.x) {
+        angle += 180;
+    } else {
+        if (a.y < b.y) {
+            angle += 360;
+        }
+    }
+    return angle;
 }
 
 void ColorDetection::createTrackbars() {
@@ -245,7 +228,8 @@ void ColorDetection::trackFilteredObject(Mat &cameraFeed) {
 
 void ColorDetection::trackColor(void) {
     //store image to matrix
-    capture.read(cameraFeed);
+    //capture.read(cameraFeed);
+    cameraFeed = imread("./poza.png");
     //convert frame from BGR to HSV colorspace
     cvtColor(cameraFeed, HSV, COLOR_BGR2HSV);
     //filter HSV image between values and store filtered image to
@@ -285,32 +269,77 @@ int main(int argc, char *argv[]) {
 
     //close_connection();
 
-    VideoCapture capture;
     //open capture object at location zero (default location for webcam)
-    capture.open("rtmp://172.16.254.99/live/nimic");
+    capture.open(/*"rtmp://172.16.254.99/live/nimic"*/0);
     //set height and width of capture frame
     capture.set(CV_CAP_PROP_FRAME_WIDTH, FRAME_WIDTH);
     capture.set(CV_CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT);
 
-    ColorDetection inamic(84, 256, 0, 256, 79, 246, capture, "inamic"); // roz
-    ColorDetection eu_corp(0, 90, 53, 190, 179, 256, capture, "eu"); //galben
-    ColorDetection eu_cap(74, 256, 115, 256, 104, 256, capture, "cap"); //albastru
-
-    inamic.createTrackbars();
+    /*inamic.createTrackbars();
     eu_cap.createTrackbars();
-    eu_corp.createTrackbars();
+    eu_corp.createTrackbars();*/
 
-    while (1)
-    {
-        //inamic.detectRing();
+    /*Detect ring center and radius*/
+    capture.read(cameraFeed);
+    cameraFeed = imread("./poza.png"); //DEBUG
+    createRingTrackbars();
+    detectRing(cameraFeed);
+
+    ColorDetection inamic(84, 256, 0, 256, 79, 246, "inamic"); // roz
+    ColorDetection eu_corp(0, 90, 53, 190, 179, 256, "eu"); //galben
+    ColorDetection eu_cap(74, 256, 115, 256, 104, 256, "cap"); //albastru
+
+    while (1) {
         inamic.trackColor();
         eu_cap.trackColor();
         eu_corp.trackColor();
 
         ///calculateAngle
-          std::cout << "Angle me: " << ColorDetection::calculateAngle(eu_cap, eu_corp) << "\n";
-          std::cout << "Angle me->enemy: " << ColorDetection::calculateAngle(eu_corp, inamic) << "\n";
+        std::cout << "Angle me: " << ColorDetection::calculateAngle(eu_cap, eu_corp) << "\n";
+        std::cout << "Angle me->enemy: " << ColorDetection::calculateAngle(eu_corp, inamic) << "\n";
     }
 
     return 0;
+}
+
+
+/*Ring detection - to be called once before the "battle" begins*/
+void detectRing(Mat cameraFeed) {
+    Mat src_gray;
+    /// Convert it to gray
+    cvtColor(cameraFeed, src_gray, CV_BGR2GRAY);
+
+    /// Reduce the noise so we avoid false circle detection
+    GaussianBlur(src_gray, src_gray, Size(9, 9), 2, 2);
+
+    vector<Vec3f> circles;
+
+    /// Apply the Hough Transform to find the circles
+    HoughCircles(src_gray, circles, CV_HOUGH_GRADIENT, 1, src_gray.rows / 8, UPPER_THRES, CENTER_THRES, 0, 0);
+
+    /// Find the biggest circle in the image, which must be the ring
+    for (size_t i = 0; i < circles.size(); i++) {
+        if (ring_radius < cvRound(circles[i][2])) {
+            ring_radius = cvRound(circles[i][2]);
+            ring_center = Point(cvRound(circles[i][0]), cvRound(circles[i][1]));
+        }
+    }
+
+    /// Show ring for debug purposes
+    // circle center
+    circle(cameraFeed, ring_center, 3, Scalar(0, 255, 0), -1, 8, 0);
+    // circle outline
+    circle(cameraFeed, ring_center, ring_radius, Scalar(0, 0, 255), 3, 8, 0);
+
+    namedWindow("Ring", CV_WINDOW_AUTOSIZE);
+    imshow("Ring", cameraFeed);
+
+    waitKey(30);
+}
+
+void createRingTrackbars(void) {
+    std::string windowName = "Ring Detection Trackbars";
+    namedWindow(windowName, 0);
+    createTrackbar("UPPER_THRES", windowName, &UPPER_THRES, UPPER_THRES);
+    createTrackbar("CENTER_THRES", windowName, &CENTER_THRES, CENTER_THRES);
 }
